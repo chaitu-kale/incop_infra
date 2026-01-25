@@ -19,7 +19,6 @@ pipeline {
 
         stage("Checkout Repos") {
             steps {
-                // Specifying 'main' - change to 'master' if needed
                 dir("frontend") {
                     git credentialsId: 'chaitu-github-creds', url: 'https://github.com/chaitu-kale/incop_frontend.git', branch: 'main'
                 }
@@ -61,11 +60,11 @@ pipeline {
         stage("Deploy to K8s") {
             steps {
                 sh """
-                kubectl apply -f infra/k8s/
-                kubectl apply -f backend/k8s/
-                kubectl apply -f frontend/k8s/
-                kubectl rollout restart deployment backend
-                kubectl rollout restart deployment frontend
+                /snap/bin/kubectl apply -f infra/k8s/
+                /snap/bin/kubectl apply -f backend/k8s/
+                /snap/bin/kubectl apply -f frontend/k8s/
+                /snap/bin/kubectl rollout restart deployment backend
+                /snap/bin/kubectl rollout restart deployment frontend
                 """
             }
         }
@@ -78,4 +77,3 @@ pipeline {
         }
     }
 }
-
