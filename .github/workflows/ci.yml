@@ -1,5 +1,9 @@
 name: CI Pipeline
 
+permissions:
+  contents: read
+  security-events: write   # Required for CodeQL to upload results
+
 on:
   push:
     branches: [ "main" ]
@@ -10,57 +14,77 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: System Cleanup
+      - name: Cleanup workspace
         run: |
           docker system prune -f || true
+          rm -rf *
 
   checkout:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Backend
+      - name: Checkout infra repo
         uses: actions/checkout@v4
         with:
-          repository: chaitu-kale/incop_backend
-          path: backend
-      - name: Checkout Frontend
+          path: infra
+
+      - name: Checkout frontend repo
         uses: actions/checkout@v4
         with:
           repository: chaitu-kale/incop_frontend
           path: frontend
-      - name: Checkout Infra
+
+      - name: Checkout backend repo
         uses: actions/checkout@v4
         with:
-          repository: chaitu-kale/incop_infra
-          path: infra
+          repository: chaitu-kale/incop_backend
+          path: backend
 
   codeql:
     runs-on: ubuntu-latest
     needs: checkout
-    strategy:
-      matrix:
-        language: [ 'javascript' ]
+    permissions:
+      security-events: write
     steps:
-      - name: Checkout Repo
+      - name: Checkout frontend
         uses: actions/checkout@v4
+        with:
+          repository: chaitu-kale/incop_frontend
+          path: frontend
+
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: chaitu-kale/incop_backend
+          path: backend
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
+          languages: javascript
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
-        with:
-          category: "security"
 
   docker-build:
     runs-on: ubuntu-latest
-    needs: checkout
+    needs: codeql
     steps:
-      - name: Login to DockerHub
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          repository: chaitu-kale/incop_frontend
+          path: frontend
+
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: chaitu-kale/incop_backend
+          path: backend
+
+      - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
@@ -82,21 +106,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build
     steps:
-      - name: Install Trivy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget
-          wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/deb stable main | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy
-
       - name: Scan Backend Image
-        run: trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.DOCKERHUB_USER }}/incops-backend:latest > trivy-backend-report.txt
-
+        run: |
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.DOCKERHUB_USER }}/incops-backend:latest > trivy-backend-report.txt
       - name: Scan Frontend Image
-        run: trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.DOCKERHUB_USER }}/incops-frontend:latest > trivy-frontend-report.txt
-
+        run: |
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.DOCKERHUB_USER }}/incops-frontend:latest > trivy-frontend-report.txt
       - name: Upload Trivy Reports
         uses: actions/upload-artifact@v4
         with:
@@ -112,10 +127,14 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+
       - name: Deploy to MicroK8s
         run: |
-          microk8s.kubectl apply -f infra/k8s/
-          microk8s.kubectl apply -f backend/k8s/
-          microk8s.kubectl apply -f frontend/k8s/
-          microk8s.kubectl rollout restart deployment backend
-          microk8s.kubectl rollout restart deployment frontend
+          kubectl apply -f infra/k8s/
+          kubectl apply -f backend/k8s/
+          kubectl apply -f frontend/k8s/
+          kubectl rollout restart deployment backend
+          kubectl rollout restart deployment frontend
