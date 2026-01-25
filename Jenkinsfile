@@ -6,11 +6,12 @@ pipeline {
     }
 
     environment {
-        DOCKERHUB_USER = "csk1234"
-        FRONTEND_IMAGE = "incops-frontend"
-        BACKEND_IMAGE  = "incops-backend"
-        KUBECONFIG     = "/var/lib/jenkins/.kube/config"
-        PATH = "/opt/codeql/codeql:${env.PATH}"
+        DOCKERHUB_USER   = "csk1234"
+        FRONTEND_IMAGE   = "incops-frontend"
+        BACKEND_IMAGE    = "incops-backend"
+        KUBECONFIG       = "/var/lib/jenkins/.kube/config"
+        PATH             = "/opt/codeql/codeql:${env.PATH}"
+        CODEQL_JAVA_HOME = "/usr/lib/jvm/java-17-openjdk-arm64"
     }
 
     stages {
@@ -110,3 +111,4 @@ pipeline {
         }
     }
 }
+
