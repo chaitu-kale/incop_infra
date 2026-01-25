@@ -10,6 +10,7 @@ pipeline {
         FRONTEND_IMAGE = "incops-frontend"
         BACKEND_IMAGE  = "incops-backend"
         KUBECONFIG     = "/var/lib/jenkins/.kube/config"
+        PATH = "/opt/codeql/codeql:${env.PATH}"
     }
 
     stages {
