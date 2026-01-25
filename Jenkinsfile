@@ -35,6 +35,21 @@ pipeline {
             }
         }
 
+        stage("SAST with CodeQL") {
+            steps {
+                sh """
+                # Backend analysis
+                codeql database create backend-db --language=javascript --source-root=backend || true
+                codeql database analyze backend-db javascript-security-and-quality.qls --format=sarif --output backend-report.sarif || true
+
+                # Frontend analysis
+                codeql database create frontend-db --language=javascript --source-root=frontend || true
+                codeql database analyze frontend-db javascript-security-and-quality.qls --format=sarif --output frontend-report.sarif || true
+                """
+                archiveArtifacts artifacts: '**/*.sarif', fingerprint: true
+            }
+        }
+
         stage("Build & Push Backend Image") {
             steps {
                 dir("backend") {
@@ -58,6 +73,19 @@ pipeline {
                         }
                     }
                 }
+            }
+        }
+
+        stage("Trivy Scan") {
+            steps {
+                sh """
+                # Scan backend image
+                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest > trivy-backend-report.txt || true
+
+                # Scan frontend image
+                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest > trivy-frontend-report.txt || true
+                """
+                archiveArtifacts artifacts: '**/trivy-*.txt', fingerprint: true
             }
         }
 
