@@ -60,11 +60,11 @@ pipeline {
         stage("Deploy to K8s") {
             steps {
                 sh """
-                /snap/bin/kubectl apply -f infra/k8s/
-                /snap/bin/kubectl apply -f backend/k8s/
-                /snap/bin/kubectl apply -f frontend/k8s/
-                /snap/bin/kubectl rollout restart deployment backend
-                /snap/bin/kubectl rollout restart deployment frontend
+                microk8s.kubectl apply -f infra/k8s/
+                microk8s.kubectl apply -f backend/k8s/
+                microk8s.kubectl apply -f frontend/k8s/
+                microk8s.kubectl rollout restart deployment backend
+                microk8s.kubectl rollout restart deployment frontend
                 """
             }
         }
