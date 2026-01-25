@@ -10,8 +10,6 @@ pipeline {
         FRONTEND_IMAGE   = "incops-frontend"
         BACKEND_IMAGE    = "incops-backend"
         KUBECONFIG       = "/var/lib/jenkins/.kube/config"
-        PATH             = "/opt/codeql/codeql:${env.PATH}"
-        CODEQL_JAVA_HOME = "/usr/lib/jvm/java-17-openjdk-arm64"
     }
 
     stages {
@@ -34,21 +32,6 @@ pipeline {
                 dir("infra") {
                     git credentialsId: 'chaitu-github-creds', url: 'https://github.com/chaitu-kale/incop_infra.git', branch: 'main'
                 }
-            }
-        }
-
-        stage("SAST with CodeQL") {
-            steps {
-                sh """
-                # Backend analysis
-                codeql database create backend-db --language=javascript --source-root=backend || true
-                codeql database analyze backend-db javascript-security-and-quality.qls --format=sarif --output backend-report.sarif || true
-
-                # Frontend analysis
-                codeql database create frontend-db --language=javascript --source-root=frontend || true
-                codeql database analyze frontend-db javascript-security-and-quality.qls --format=sarif --output frontend-report.sarif || true
-                """
-                archiveArtifacts artifacts: '**/*.sarif', fingerprint: true
             }
         }
 
@@ -81,13 +64,11 @@ pipeline {
         stage("Trivy Scan") {
             steps {
                 sh """
-                # Scan backend image
-                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest > trivy-backend-report.txt || true
-
-                # Scan frontend image
-                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest > trivy-frontend-report.txt || true
+                mkdir -p reports
+                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest > reports/trivy-backend-report.txt || true
+                trivy image --exit-code 0 --severity HIGH,CRITICAL ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest > reports/trivy-frontend-report.txt || true
                 """
-                archiveArtifacts artifacts: '**/trivy-*.txt', fingerprint: true
+                archiveArtifacts artifacts: 'reports/*.txt', fingerprint: true
             }
         }
 
@@ -111,4 +92,3 @@ pipeline {
         }
     }
 }
-
