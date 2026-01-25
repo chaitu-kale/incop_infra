@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        git 'Default'
+    }
+
     environment {
         DOCKERHUB_USER = "csk1234"
         FRONTEND_IMAGE = "incops-frontend"
