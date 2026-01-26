@@ -86,7 +86,7 @@ pipeline {
 
         stage("DAST Scan") {
             steps {
-                sh """
+                sh '''
                 mkdir -p reports
                 docker run --rm -v $(pwd)/reports:/zap/wrk/:rw \
                   zaproxy/zap-stable zap-baseline.py \
@@ -97,7 +97,7 @@ pipeline {
                   zaproxy/zap-stable zap-baseline.py \
                   -t http://myapp.local/backend \
                   -r zap-backend-report.html || true
-                """
+                '''
             }
             post {
                 always {
