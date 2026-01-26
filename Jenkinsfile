@@ -83,6 +83,28 @@ pipeline {
                 """
             }
         }
+
+        stage("DAST Scan") {
+            steps {
+                sh """
+                mkdir -p reports
+                docker run --rm -v $(pwd)/reports:/zap/wrk/:rw \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t http://myapp.local/frontend \
+                  -r zap-frontend-report.html || true
+
+                docker run --rm -v $(pwd)/reports:/zap/wrk/:rw \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t http://myapp.local/backend \
+                  -r zap-backend-report.html || true
+                """
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/zap-*.html', fingerprint: true
+                }
+            }
+        }
     }
 
     post {
