@@ -1,21 +1,15 @@
 pipeline {
     agent any
 
-    tools {
-        git 'Default'
-    }
-
     environment {
         DOCKERHUB_USER   = "csk1234"
         FRONTEND_IMAGE   = "incops-frontend"
         BACKEND_IMAGE    = "incops-backend"
-        KUBECONFIG       = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
         stage("System Cleanup") {
             steps {
-                echo "Reclaiming disk space before build..."
                 sh 'docker system prune -f || true'
                 cleanWs()
             }
@@ -78,22 +72,20 @@ pipeline {
                 mkdir -p reports
                 chmod -R 777 reports
 
-                # Frontend local scan
+                # Frontend local scan (EXPOSE 3000 → map correctly)
                 docker rm -f test-frontend || true
-                docker run -d --name test-frontend -p 8081:80 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
-                sleep 20
-                curl -s http://127.0.0.1:8081 || true
+                docker run -d --name test-frontend -p 8081:3000 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
+                until curl -s http://127.0.0.1:8081 > /dev/null; do sleep 5; done
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
                   -t http://127.0.0.1:8081 -r zap-local-frontend.html -I || true
                 docker rm -f test-frontend || true
 
-                # Backend local scan
+                # Backend local scan (EXPOSE 5000 → map correctly)
                 docker rm -f test-backend || true
-                docker run -d --name test-backend -p 8082:80 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
-                sleep 20
-                curl -s http://127.0.0.1:8082 || true
+                docker run -d --name test-backend -p 8082:5000 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
+                until curl -s http://127.0.0.1:8082 > /dev/null; do sleep 5; done
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
@@ -116,6 +108,8 @@ pipeline {
                 microk8s.kubectl apply -f frontend/k8s/
                 microk8s.kubectl rollout restart deployment backend
                 microk8s.kubectl rollout restart deployment frontend
+                microk8s.kubectl rollout status deployment backend
+                microk8s.kubectl rollout status deployment frontend
                 """
             }
         }
