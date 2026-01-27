@@ -72,6 +72,39 @@ pipeline {
             }
         }
 
+        stage("DAST - Local Container Scan") {
+            steps {
+                sh '''
+                mkdir -p reports
+
+                # Frontend local scan
+                docker rm -f test-frontend || true
+                docker run -d --name test-frontend -p 8081:80 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
+                sleep 10
+                docker run --rm --network="host" \
+                  -v $(pwd)/reports:/zap/wrk \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t http://127.0.0.1:8081 -r zap-local-frontend.html -I || true
+                docker rm -f test-frontend || true
+
+                # Backend local scan
+                docker rm -f test-backend || true
+                docker run -d --name test-backend -p 8082:80 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
+                sleep 10
+                docker run --rm --network="host" \
+                  -v $(pwd)/reports:/zap/wrk \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t http://127.0.0.1:8082 -r zap-local-backend.html -I || true
+                docker rm -f test-backend || true
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/zap-local-*.html', fingerprint: true
+                }
+            }
+        }
+
         stage("Deploy to K8s") {
             steps {
                 sh """
@@ -84,7 +117,7 @@ pipeline {
             }
         }
 
-        stage("DAST Scan") {
+        stage("DAST - Ingress Scan") {
             steps {
                 sh '''
                 mkdir -p reports
