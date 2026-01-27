@@ -76,11 +76,13 @@ pipeline {
             steps {
                 sh '''
                 mkdir -p reports
+                chmod -R 777 reports
 
                 # Frontend local scan
                 docker rm -f test-frontend || true
                 docker run -d --name test-frontend -p 8081:80 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
-                sleep 10
+                sleep 20
+                curl -s http://127.0.0.1:8081 || true
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
@@ -90,7 +92,8 @@ pipeline {
                 # Backend local scan
                 docker rm -f test-backend || true
                 docker run -d --name test-backend -p 8082:80 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
-                sleep 10
+                sleep 20
+                curl -s http://127.0.0.1:8082 || true
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
@@ -121,6 +124,8 @@ pipeline {
             steps {
                 sh '''
                 mkdir -p reports
+                chmod -R 777 reports
+
                 docker run --rm -v $(pwd)/reports:/zap/wrk/:rw \
                   zaproxy/zap-stable zap-baseline.py \
                   -t http://myapp.local/frontend \
