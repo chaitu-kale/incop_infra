@@ -18,10 +18,10 @@ pipeline {
     stages {
         stage("System Cleanup") {
             steps {
-                sh '''
-                docker system prune -f || true
-                cleanWs
+                sh 'docker system prune -f || true'
+                cleanWs()   // Jenkins pipeline step, not shell
 
+                sh '''
                 # Ensure a persistent buildx builder exists and uses host networking
                 if ! docker buildx inspect jenkins-builder >/dev/null 2>&1; then
                   docker buildx create --name jenkins-builder --use --driver docker-container --driver-opt network=host
@@ -29,7 +29,6 @@ pipeline {
                   docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
                   docker buildx inspect jenkins-builder --bootstrap || true
                 else
-                  # If builder exists, show its config; if it lacks host networking you can recreate it manually
                   docker buildx inspect jenkins-builder || true
                 fi
                 '''
@@ -169,7 +168,6 @@ pipeline {
             sh "docker rmi ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest || true"
             sh "docker rmi ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest || true"
             sh "docker system prune -f || true"
-            sh 'docker logout || true'
         }
     }
 }
