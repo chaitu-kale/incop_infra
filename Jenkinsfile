@@ -32,12 +32,12 @@ pipeline {
         stage("Build & Push Backend Image") {
             steps {
                 dir("backend") {
-                    script {
-                        docker.withRegistry('', 'csk-dockerhub-creds') {
-                            def img = docker.build("${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest", ".")
-                            img.push()
-                        }
-                    }
+                    sh '''
+                    docker buildx create --use || true
+                    docker buildx inspect --bootstrap
+                    docker buildx build --platform linux/amd64,linux/arm64 \
+                      -t ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest --push .
+                    '''
                 }
             }
         }
@@ -45,12 +45,12 @@ pipeline {
         stage("Build & Push Frontend Image") {
             steps {
                 dir("frontend") {
-                    script {
-                        docker.withRegistry('', 'csk-dockerhub-creds') {
-                            def img = docker.build("${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest", ".")
-                            img.push()
-                        }
-                    }
+                    sh '''
+                    docker buildx create --use || true
+                    docker buildx inspect --bootstrap
+                    docker buildx build --platform linux/amd64,linux/arm64 \
+                      -t ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest --push .
+                    '''
                 }
             }
         }
@@ -72,7 +72,7 @@ pipeline {
                 mkdir -p reports
                 chmod -R 777 reports
 
-                # Frontend local scan (EXPOSE 3000 → map correctly)
+                # Frontend local scan
                 docker rm -f test-frontend || true
                 docker run -d --name test-frontend -p 8081:3000 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
                 until curl -s http://127.0.0.1:8081 > /dev/null; do sleep 5; done
@@ -82,7 +82,7 @@ pipeline {
                   -t http://127.0.0.1:8081 -r zap-local-frontend.html -I || true
                 docker rm -f test-frontend || true
 
-                # Backend local scan (EXPOSE 5000 → map correctly)
+                # Backend local scan
                 docker rm -f test-backend || true
                 docker run -d --name test-backend -p 8082:5000 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
                 until curl -s http://127.0.0.1:8082 > /dev/null; do sleep 5; done
@@ -108,8 +108,8 @@ pipeline {
                 microk8s.kubectl apply -f frontend/k8s/
                 microk8s.kubectl rollout restart deployment backend
                 microk8s.kubectl rollout restart deployment frontend
-                microk8s.kubectl rollout status deployment backend
-                microk8s.kubectl rollout status deployment frontend
+                microk8s.kubectl rollout status deployment backend --timeout=120s
+                microk8s.kubectl rollout status deployment frontend --timeout=120s
                 """
             }
         }
