@@ -12,7 +12,7 @@ pipeline {
     }
 
     tools {
-        git 'DefaultGit' // removes "Selected Git installation does not exist" warning
+        git 'Default' // removes "Selected Git installation does not exist" warning
     }
 
     stages {
