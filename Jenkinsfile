@@ -7,11 +7,24 @@ pipeline {
         BACKEND_IMAGE    = "incops-backend"
     }
 
+    options {
+        timeout(time: 30, unit: 'MINUTES') // prevent jobs hanging forever
+    }
+
+    tools {
+        git 'DefaultGit' // removes "Selected Git installation does not exist" warning
+    }
+
     stages {
         stage("System Cleanup") {
             steps {
                 sh 'docker system prune -f || true'
                 cleanWs()
+                // initialize buildx builder once
+                sh '''
+                docker buildx create --name jenkins-builder --use || true
+                docker buildx inspect jenkins-builder || true
+                '''
             }
         }
 
@@ -29,12 +42,18 @@ pipeline {
             }
         }
 
+        stage("Docker Login") {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'csk-dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                }
+            }
+        }
+
         stage("Build & Push Backend Image") {
             steps {
                 dir("backend") {
                     sh '''
-                    docker buildx create --use || true
-                    docker buildx inspect --bootstrap
                     docker buildx build --platform linux/amd64,linux/arm64 \
                       -t ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest --push .
                     '''
@@ -46,8 +65,6 @@ pipeline {
             steps {
                 dir("frontend") {
                     sh '''
-                    docker buildx create --use || true
-                    docker buildx inspect --bootstrap
                     docker buildx build --platform linux/amd64,linux/arm64 \
                       -t ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest --push .
                     '''
@@ -75,7 +92,7 @@ pipeline {
                 # Frontend local scan
                 docker rm -f test-frontend || true
                 docker run -d --name test-frontend -p 8081:3000 ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest
-                until curl -s http://127.0.0.1:8081 > /dev/null; do sleep 5; done
+                timeout 60 sh -c 'until curl -s http://127.0.0.1:8081 > /dev/null; do sleep 5; done'
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
@@ -85,7 +102,7 @@ pipeline {
                 # Backend local scan
                 docker rm -f test-backend || true
                 docker run -d --name test-backend -p 8082:5000 ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest
-                until curl -s http://127.0.0.1:8082 > /dev/null; do sleep 5; done
+                timeout 60 sh -c 'until curl -s http://127.0.0.1:8082 > /dev/null; do sleep 5; done'
                 docker run --rm --network="host" \
                   -v $(pwd)/reports:/zap/wrk \
                   zaproxy/zap-stable zap-baseline.py \
@@ -143,6 +160,7 @@ pipeline {
         always {
             sh "docker rmi ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest || true"
             sh "docker rmi ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest || true"
+            sh "docker system prune -f || true"
         }
     }
 }
