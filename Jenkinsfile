@@ -18,12 +18,20 @@ pipeline {
     stages {
         stage("System Cleanup") {
             steps {
-                sh 'docker system prune -f || true'
-                cleanWs()
-                // initialize buildx builder once
                 sh '''
-                docker buildx create --name jenkins-builder --use || true
-                docker buildx inspect jenkins-builder || true
+                docker system prune -f || true
+                cleanWs
+
+                # Ensure a persistent buildx builder exists and uses host networking
+                if ! docker buildx inspect jenkins-builder >/dev/null 2>&1; then
+                  docker buildx create --name jenkins-builder --use --driver docker-container --driver-opt network=host
+                  # Enable QEMU emulation for multi-arch builds (amd64 on ARM hosts)
+                  docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+                  docker buildx inspect jenkins-builder --bootstrap || true
+                else
+                  # If builder exists, show its config; if it lacks host networking you can recreate it manually
+                  docker buildx inspect jenkins-builder || true
+                fi
                 '''
             }
         }
@@ -54,7 +62,7 @@ pipeline {
             steps {
                 dir("backend") {
                     sh '''
-                    docker buildx build --platform linux/amd64,linux/arm64 \
+                    docker buildx build --builder jenkins-builder --platform linux/amd64,linux/arm64 \
                       -t ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest --push .
                     '''
                 }
@@ -65,7 +73,7 @@ pipeline {
             steps {
                 dir("frontend") {
                     sh '''
-                    docker buildx build --platform linux/amd64,linux/arm64 \
+                    docker buildx build --builder jenkins-builder --platform linux/amd64,linux/arm64 \
                       -t ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest --push .
                     '''
                 }
@@ -161,6 +169,7 @@ pipeline {
             sh "docker rmi ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest || true"
             sh "docker rmi ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest || true"
             sh "docker system prune -f || true"
+            sh 'docker logout || true'
         }
     }
 }
