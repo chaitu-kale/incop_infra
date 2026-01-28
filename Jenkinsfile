@@ -1,37 +1,23 @@
 pipeline {
     agent any
 
+    tools {
+        git 'Default'
+    }
+
     environment {
         DOCKERHUB_USER   = "csk1234"
         FRONTEND_IMAGE   = "incops-frontend"
         BACKEND_IMAGE    = "incops-backend"
-    }
-
-    options {
-        timeout(time: 30, unit: 'MINUTES') // prevent jobs hanging forever
-    }
-
-    tools {
-        git 'Default' // removes "Selected Git installation does not exist" warning
+        KUBECONFIG       = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
         stage("System Cleanup") {
             steps {
+                echo "Reclaiming disk space before build..."
                 sh 'docker system prune -f || true'
-                cleanWs()   // Jenkins pipeline step, not shell
-
-                sh '''
-                # Ensure a persistent buildx builder exists and uses host networking
-                if ! docker buildx inspect jenkins-builder >/dev/null 2>&1; then
-                  docker buildx create --name jenkins-builder --use --driver docker-container --driver-opt network=host
-                  # Enable QEMU emulation for multi-arch builds (amd64 on ARM hosts)
-                  docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
-                  docker buildx inspect jenkins-builder --bootstrap || true
-                else
-                  docker buildx inspect jenkins-builder || true
-                fi
-                '''
+                cleanWs()
             }
         }
 
@@ -49,21 +35,15 @@ pipeline {
             }
         }
 
-        stage("Docker Login") {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'csk-dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
-                }
-            }
-        }
-
         stage("Build & Push Backend Image") {
             steps {
                 dir("backend") {
-                    sh '''
-                    docker buildx build --builder jenkins-builder --platform linux/amd64,linux/arm64 \
-                      -t ${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest --push .
-                    '''
+                    script {
+                        docker.withRegistry('', 'csk-dockerhub-creds') {
+                            def img = docker.build("${DOCKERHUB_USER}/${BACKEND_IMAGE}:latest", ".")
+                            img.push()
+                        }
+                    }
                 }
             }
         }
@@ -71,10 +51,12 @@ pipeline {
         stage("Build & Push Frontend Image") {
             steps {
                 dir("frontend") {
-                    sh '''
-                    docker buildx build --builder jenkins-builder --platform linux/amd64,linux/arm64 \
-                      -t ${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest --push .
-                    '''
+                    script {
+                        docker.withRegistry('', 'csk-dockerhub-creds') {
+                            def img = docker.build("${DOCKERHUB_USER}/${FRONTEND_IMAGE}:latest", ".")
+                            img.push()
+                        }
+                    }
                 }
             }
         }
@@ -132,8 +114,6 @@ pipeline {
                 microk8s.kubectl apply -f frontend/k8s/
                 microk8s.kubectl rollout restart deployment backend
                 microk8s.kubectl rollout restart deployment frontend
-                microk8s.kubectl rollout status deployment backend --timeout=120s
-                microk8s.kubectl rollout status deployment frontend --timeout=120s
                 """
             }
         }
