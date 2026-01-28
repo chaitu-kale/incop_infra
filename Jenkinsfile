@@ -122,7 +122,7 @@ pipeline {
             steps {
                 sh '''
                 mkdir -p reports
-                chmod -R 777 reports
+               #chmod -R 777 reports
 
                 docker run --rm -v $(pwd)/reports:/zap/wrk/:rw \
                   zaproxy/zap-stable zap-baseline.py \
