@@ -5,9 +5,9 @@ metadata:
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"   # don’t force HTTPS until TLS is ready
-    nginx.ingress.kubernetes.io/limit-rps: "20"         # basic rate limiting
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"  # limit upload size
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"    # force HTTPS once TLS secret exists
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
   rules:
   - host: app.local
@@ -28,8 +28,7 @@ spec:
             port:
               number: 3000
 
-  # Optional TLS block — safe to leave in, but only works if you create the secret
   tls:
   - hosts:
     - app.local
-    secretName: app-tls-secret
+    secretName: app-tls-secret   # must be created with your cert/key
