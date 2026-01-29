@@ -108,13 +108,13 @@ pipeline {
 
         stage("Deploy to K8s") {
             steps {
-                sh """
-                microk8s.kubectl apply -f infra/k8s/
-                microk8s.kubectl apply -f backend/k8s/
-                microk8s.kubectl apply -f frontend/k8s/
-                microk8s.kubectl rollout restart deployment backend
-                microk8s.kubectl rollout restart deployment frontend
-                """
+                sh '''
+                kubectl apply -f infra/k8s/
+                kubectl apply -f backend/k8s/
+                kubectl apply -f frontend/k8s/
+                kubectl rollout restart deployment backend
+                kubectl rollout restart deployment frontend
+                '''
             }
         }
 
